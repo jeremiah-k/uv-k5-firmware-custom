@@ -211,8 +211,10 @@ void Main(void)
 		RADIO_ConfigureNOAA();
 #endif
 
+#ifdef ENABLE_SCANNER_STATE_PERSISTENCE
 		// Restore scanner state if it was active when powered off
 		CHFRSCANNER_LoadState();
+#endif
 
 		// ******************
 	}

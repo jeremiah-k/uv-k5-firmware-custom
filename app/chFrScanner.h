@@ -15,6 +15,7 @@ extern uint32_t          gScanRangeStart;
 extern uint32_t          gScanRangeStop;
 #endif
 
+#ifdef ENABLE_SCANNER_STATE_PERSISTENCE
 // Scanner state persistence structure
 typedef struct {
     uint8_t  magic;              // Magic number to validate saved state (0xAB)
@@ -29,13 +30,16 @@ typedef struct {
 
 #define SCANNER_STATE_MAGIC 0xAB
 #define SCANNER_STATE_EEPROM_ADDR 0x0F20
+#endif
 
 void CHFRSCANNER_Found(void);
 void CHFRSCANNER_Stop(void);
 void CHFRSCANNER_Start(const bool storeBackupSettings, const int8_t scan_direction);
 void CHFRSCANNER_ContinueScanning(void);
+#ifdef ENABLE_SCANNER_STATE_PERSISTENCE
 void CHFRSCANNER_SaveState(void);
 void CHFRSCANNER_LoadState(void);
 void CHFRSCANNER_ClearState(void);
+#endif
 
 #endif
