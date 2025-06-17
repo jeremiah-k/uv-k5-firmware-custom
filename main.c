@@ -22,6 +22,7 @@
 
 #include "app/app.h"
 #include "app/dtmf.h"
+#include "app/chFrScanner.h"
 #include "audio.h"
 #include "bsp/dp32g030/gpio.h"
 #include "bsp/dp32g030/syscon.h"
@@ -209,6 +210,9 @@ void Main(void)
 #ifdef ENABLE_NOAA
 		RADIO_ConfigureNOAA();
 #endif
+
+		// Restore scanner state if it was active when powered off
+		CHFRSCANNER_LoadState();
 
 		// ******************
 	}

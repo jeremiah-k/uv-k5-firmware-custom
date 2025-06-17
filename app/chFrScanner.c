@@ -4,6 +4,7 @@
 #include "functions.h"
 #include "misc.h"
 #include "settings.h"
+#include "driver/eeprom.h"
 
 int8_t            gScanStateDir;
 bool              gScanKeepResult;
@@ -65,6 +66,9 @@ void CHFRSCANNER_Start(const bool storeBackupSettings, const int8_t scan_directi
 	gScheduleScanListen    = false;
 	gRxReceptionMode       = RX_MODE_NONE;
 	gScanPauseMode         = false;
+
+	// Save scanner state to EEPROM
+	CHFRSCANNER_SaveState();
 }
 
 void CHFRSCANNER_ContinueScanning(void)
@@ -118,6 +122,9 @@ void CHFRSCANNER_Found(void)
 
 
 	gScanKeepResult = true;
+
+	// Save updated scanner state
+	CHFRSCANNER_SaveState();
 }
 
 void CHFRSCANNER_Stop(void)
@@ -152,6 +159,9 @@ void CHFRSCANNER_Stop(void)
 
 	RADIO_SetupRegisters(true);
 	gUpdateDisplay = true;
+
+	// Clear scanner state from EEPROM since scanning has stopped
+	CHFRSCANNER_ClearState();
 }
 
 static void NextFreqChannel(void)
@@ -270,4 +280,103 @@ static void NextMemChannel(void)
 	if (enabled)
 		if (++currentScanList >= SCAN_NEXT_NUM)
 			currentScanList = SCAN_NEXT_CHAN_SCANLIST1;  // back round we go
+}
+
+// Scanner state persistence functions
+void CHFRSCANNER_SaveState(void)
+{
+	ScannerState_t state;
+
+	// Only save state if scanning is active
+	if (gScanStateDir == SCAN_OFF) {
+		CHFRSCANNER_ClearState();
+		return;
+	}
+
+	// Fill the state structure
+	state.magic = SCANNER_STATE_MAGIC;
+	state.scanStateDir = gScanStateDir;
+	state.currentScanList = (uint8_t)currentScanList;
+	state.nextMrChannel = gNextMrChannel;
+	state.scanPauseMode = gScanPauseMode;
+	state.rxVfo = gEeprom.RX_VFO;
+	state.reserved1 = 0;
+	state.reserved2 = 0;
+
+	// Write to EEPROM
+	EEPROM_WriteBuffer(SCANNER_STATE_EEPROM_ADDR, &state, true);
+}
+
+void CHFRSCANNER_LoadState(void)
+{
+	ScannerState_t state;
+
+	// Read from EEPROM
+	EEPROM_ReadBuffer(SCANNER_STATE_EEPROM_ADDR, &state, sizeof(state));
+
+	// Check if the state is valid
+	if (state.magic != SCANNER_STATE_MAGIC || state.scanStateDir == SCAN_OFF) {
+		return; // No valid scanner state to restore
+	}
+
+	// Restore scanner state
+	gScanStateDir = state.scanStateDir;
+	currentScanList = (scan_next_chan_t)state.currentScanList;
+	gNextMrChannel = state.nextMrChannel;
+	gScanPauseMode = state.scanPauseMode;
+
+	// Ensure the RX VFO matches what was saved
+	if (state.rxVfo < 2) {
+		gEeprom.RX_VFO = state.rxVfo;
+	}
+
+	// Restore the channel/frequency to the saved position
+	if (IS_MR_CHANNEL(gNextMrChannel)) {
+		gEeprom.MrChannel[gEeprom.RX_VFO] = gNextMrChannel;
+		gEeprom.ScreenChannel[gEeprom.RX_VFO] = gNextMrChannel;
+	}
+
+	// Configure radio for the restored state
+	RADIO_SelectVfos();
+	RADIO_ConfigureChannel(gEeprom.RX_VFO, VFO_CONFIGURE_RELOAD);
+	RADIO_SetupRegisters(true);
+
+	// Set up scanning parameters
+	gScanPauseDelayIn_10ms = scan_pause_delay_in_2_10ms;
+	gScheduleScanListen = false;
+	gRxReceptionMode = RX_MODE_NONE;
+	gScanKeepResult = false;
+
+	// Initialize backup settings for proper cleanup later
+	initialCROSS_BAND_RX_TX = gEeprom.CROSS_BAND_RX_TX;
+	gEeprom.CROSS_BAND_RX_TX = CROSS_BAND_OFF;
+
+	if (IS_MR_CHANNEL(gNextMrChannel)) {
+		initialFrqOrChan = gNextMrChannel;
+		lastFoundFrqOrChan = gNextMrChannel;
+	} else {
+		initialFrqOrChan = gRxVfo->freq_config_RX.Frequency;
+		lastFoundFrqOrChan = gRxVfo->freq_config_RX.Frequency;
+	}
+
+	gUpdateDisplay = true;
+	gUpdateStatus = true;
+}
+
+void CHFRSCANNER_ClearState(void)
+{
+	ScannerState_t state;
+
+	// Clear the state structure
+	state.magic = 0;
+	state.scanStateDir = SCAN_OFF;
+	state.currentScanList = 0;
+	state.nextMrChannel = 0;
+	state.scanPauseMode = false;
+	state.rxVfo = 0;
+	state.reserved1 = 0;
+	state.reserved2 = 0;
+
+	// Write cleared state to EEPROM
+	EEPROM_WriteBuffer(SCANNER_STATE_EEPROM_ADDR, &state, true);
 }
