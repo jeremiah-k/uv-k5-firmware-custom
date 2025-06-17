@@ -5,3 +5,4 @@ firmware
 /firmware.bin
 /compiled-firmware
 /.vscode/*
+/.venv/
